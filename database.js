@@ -1,6 +1,6 @@
 // database.js
 const { MongoClient } = require('mongodb');
-const uri = 'mongodb+srv://rydex:QN4y_*zm.cZFbj7@rydex.zte0w.mongodb.net/?retryWrites=true&w=majority&appName=Rydex'; 
+const uri = process.env.MONGO_URI; 
 const client = new MongoClient(uri);
 
 async function connect() {
