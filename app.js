@@ -1,4 +1,3 @@
-// app.js
 const express = require('express');
 const bodyParser = require('body-parser');
 const Fuse = require('fuse.js');
@@ -10,8 +9,8 @@ const PORT = process.env.PORT || 3000;
 
 let cachedData = {};
 
-connect().then(async (database) => {
-    const db = database;
+// Initialize connection and load cached data
+connect().then(async (db) => {
     const responses = await db.collection('responses').find().toArray();
     responses.forEach(response => {
         cachedData[response.key] = response.values;
@@ -25,7 +24,7 @@ function getRandomElement(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
-app.get('/rydex/chat', (req, res) => {
+app.get('/rydex/chat', async (req, res) => {
     const message = req.query.q;
 
     if (!message) {
@@ -68,17 +67,18 @@ app.post('/rydex/teach', async (req, res) => {
     }
     cachedData[key].push(value);
 
-    connect().then(db => {
-        db.collection('responses').updateOne(
+    try {
+        const db = await connect();
+        await db.collection('responses').updateOne(
             { key },
             { $set: { values: cachedData[key] } },
             { upsert: true }
         );
-    }).catch(err => {
+        res.send(`Thank you for teaching me!\nMessage: ${key}\nResponse: ${value}`);
+    } catch (err) {
         console.error("Failed to update database:", err);
-    });
-
-    res.send(`Thank you for teaching me!\nMessage: ${key}\nResponse: ${value}`);
+        res.status(500).send("Failed to save response. Please try again later.");
+    }
 });
 
 app.listen(PORT, () => {
