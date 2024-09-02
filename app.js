@@ -9,7 +9,6 @@ const PORT = process.env.PORT || 3000;
 
 let cachedData = {};
 
-// Initialize connection and load cached data
 connect().then(async (db) => {
     const responses = await db.collection('responses').find().toArray();
     responses.forEach(response => {
@@ -28,38 +27,53 @@ app.get('/rydex/chat', async (req, res) => {
     const message = req.query.q;
 
     if (!message) {
-        return res.status(400).send("Message query is required");
+        return res.status(400).json({
+            status: 400,
+            rydex: "Parameter q is missing.",
+            author: "Rydex"
+        });
     }
+
+    let response;
 
     if (cachedData[message] && cachedData[message].length > 0) {
-        const response = getRandomElement(cachedData[message]);
-        return res.send(response);
-    }
+        response = getRandomElement(cachedData[message]);
+    } else {
+        const keys = Object.keys(cachedData);
+        const fuse = new Fuse(keys, { includeScore: true, threshold: 0.3 });
+        const results = fuse.search(message);
 
-    const keys = Object.keys(cachedData);
-    const fuse = new Fuse(keys, { includeScore: true, threshold: 0.3 });
-    const results = fuse.search(message);
+        if (results.length > 0) {
+            const bestMatch = results[0].item;
+            const bestResponses = cachedData[bestMatch];
+            if (bestResponses.length > 0) {
+                response = getRandomElement(bestResponses);
+            }
+        }
 
-    if (results.length > 0) {
-        const bestMatch = results[0].item;
-        const bestResponses = cachedData[bestMatch];
-        if (bestResponses.length > 0) {
-            const response = getRandomElement(bestResponses);
-            return res.send(response);
+        if (!response) {
+            const randomKey = getRandomElement(keys);
+            const randomResponses = cachedData[randomKey];
+            response = getRandomElement(randomResponses);
         }
     }
 
-    const randomKey = getRandomElement(keys);
-    const randomResponses = cachedData[randomKey];
-    const randomResponse = getRandomElement(randomResponses);
-    return res.send(randomResponse);
+    res.json({
+        status: 200,
+        rydex: response || "No response found at the moment.",
+        author: "Rydex"
+    });
 });
 
 app.post('/rydex/teach', async (req, res) => {
     const { q: key, a: value } = req.body;
 
     if (!key || !value) {
-        return res.status(400).send("Both 'q' and 'a' are required.");
+        return res.status(400).json({
+            status: 400,
+            rydex: "Missing parameters 'q' and 'a'.",
+            author: "Rydex"
+        });
     }
 
     if (!cachedData[key]) {
@@ -74,10 +88,18 @@ app.post('/rydex/teach', async (req, res) => {
             { $set: { values: cachedData[key] } },
             { upsert: true }
         );
-        res.send(`Thank you for teaching me!\nMessage: ${key}\nResponse: ${value}`);
+        res.json({
+            status: 200,
+            rydex: "Rydex teached successfully.",
+            author: "Rydex"
+        });
     } catch (err) {
         console.error("Failed to update database:", err);
-        res.status(500).send("Failed to save response. Please try again later.");
+        res.status(500).json({
+            status: 500,
+            rydex: "Failed to save response. Please try again later.",
+            author: "Rydex"
+        });
     }
 });
 
